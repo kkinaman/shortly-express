@@ -2,6 +2,7 @@ var express = require('express');
 var util = require('./lib/utility');
 var partials = require('express-partials');
 var bodyParser = require('body-parser');
+var session = require('express-session');
 
 
 var db = require('./app/config');
@@ -22,22 +23,44 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(__dirname + '/public'));
 
+app.use(session({secret: '2421948719284HIIII', cookie: {}}));
+
+// var checkUser = function(req, res, next) {
+//   console.log('FIRST CALLBACK IS RUNNING FOR GET / with username');
+//   if (!req.session.username) {
+//     console.log('FIRST CALLBACK IS RUNNING FOR GET /');
+//     res.redirect('/login');
+//   } 
+// };
 
 app.get('/', 
 function(req, res) {
-  res.render('index');
+  if (!req.session.username) {
+    res.redirect('/login');
+  } else {
+    res.render('index');
+  }
 });
 
 app.get('/create', 
 function(req, res) {
-  res.render('index');
+  if (!req.session.username) {
+    res.redirect('/login');
+  } else {
+    res.render('index');
+  }
 });
+
 
 app.get('/links', 
 function(req, res) {
-  Links.reset().fetch().then(function(links) {
-    res.status(200).send(links.models);
-  });
+  if (req.session.username) {
+    Links.reset().fetch().then(function(links) {
+      res.status(200).send(links.models);
+    }); 
+  } else {
+    res.redirect('/login');
+  }
 });
 
 app.post('/links', 
@@ -75,7 +98,41 @@ function(req, res) {
 /************************************************************/
 // Write your authentication routes here
 /************************************************************/
+app.get('/login', function(req, res) {
+  res.render('login');
+});
 
+app.post('/login', function(req, res) {
+  var user = req.body.username;
+  db.knex('users')
+    .where('username', '=', user)
+    .then(function(results) {
+      if (results[0]) {
+        req.session.username = user;
+        res.redirect('/');
+      } else {
+        res.redirect('/login');
+      }
+    }).catch(function(err) {
+      console.log(err);
+    });
+
+  
+});
+
+app.get('/signup', function(req, res) {
+  res.render('signup');
+});
+
+app.post('/signup', function(req, res) {
+  new User({
+    'username': req.body.username,
+    'password': req.body.password
+  }).save().then(function() {
+    req.session.username = req.body.username;
+    res.redirect('/');
+  });
+});
 
 
 /************************************************************/
