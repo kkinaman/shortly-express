@@ -25,42 +25,35 @@ app.use(express.static(__dirname + '/public'));
 
 app.use(session({secret: '2421948719284HIIII', cookie: {}}));
 
-// var checkUser = function(req, res, next) {
-//   console.log('FIRST CALLBACK IS RUNNING FOR GET / with username');
-//   if (!req.session.username) {
-//     console.log('FIRST CALLBACK IS RUNNING FOR GET /');
-//     res.redirect('/login');
-//   } 
-// };
-
-app.get('/', 
-function(req, res) {
+var checkUser = function(req, res, next) {
   if (!req.session.username) {
     res.redirect('/login');
   } else {
-    res.render('index');
+    next();
   }
+};
+
+app.get('/', checkUser,
+function(req, res) {
+  res.render('index');
 });
 
-app.get('/create', 
+app.post('/', function(req, res) {
+  req.session.destroy();
+  res.redirect('/login');
+});
+
+app.get('/create', checkUser,
 function(req, res) {
-  if (!req.session.username) {
-    res.redirect('/login');
-  } else {
-    res.render('index');
-  }
+  res.render('index');
 });
 
 
-app.get('/links', 
+app.get('/links', checkUser,
 function(req, res) {
-  if (req.session.username) {
-    Links.reset().fetch().then(function(links) {
-      res.status(200).send(links.models);
-    }); 
-  } else {
-    res.redirect('/login');
-  }
+  Links.reset().fetch().then(function(links) {
+    res.status(200).send(links.models);
+  }); 
 });
 
 app.post('/links', 
@@ -99,6 +92,7 @@ function(req, res) {
 // Write your authentication routes here
 /************************************************************/
 app.get('/login', function(req, res) {
+  console.log('LOGIN GET IS RUNNING WOOOOOO!');
   res.render('login');
 });
 
