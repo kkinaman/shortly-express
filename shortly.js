@@ -3,6 +3,7 @@ var util = require('./lib/utility');
 var partials = require('express-partials');
 var bodyParser = require('body-parser');
 var session = require('express-session');
+var crypto = require('crypto');
 
 
 var db = require('./app/config');
@@ -91,8 +92,17 @@ function(req, res) {
 /************************************************************/
 // Write your authentication routes here
 /************************************************************/
+var hashPassword = function(pword) {
+  var shasum = crypto.createHash('sha1');
+  shasum.update(pword);
+  return shasum.digest('hex'); 
+};
+
+var makeRandomString = function(length) {
+  return crypto.randomBytes(Math.ceil(length / 2)).toString('hex').slice(0, length);
+};
+
 app.get('/login', function(req, res) {
-  console.log('LOGIN GET IS RUNNING WOOOOOO!');
   res.render('login');
 });
 
@@ -102,8 +112,14 @@ app.post('/login', function(req, res) {
     .where('username', '=', user)
     .then(function(results) {
       if (results[0]) {
-        req.session.username = user;
-        res.redirect('/');
+        if (results[0]['password'] === hashPassword(results[0].salt + req.body.password)) {
+          req.session.username = user;
+          res.redirect('/');
+        } else {
+          //show message to user that username/password invalid
+          // document.getElementsByClassName('invalid_login').show();
+          res.redirect('/login');
+        }
       } else {
         res.redirect('/login');
       }
@@ -119,9 +135,11 @@ app.get('/signup', function(req, res) {
 });
 
 app.post('/signup', function(req, res) {
+  var salt = makeRandomString(10);
   new User({
     'username': req.body.username,
-    'password': req.body.password
+    'password': hashPassword(salt + req.body.password),
+    'salt': salt
   }).save().then(function() {
     req.session.username = req.body.username;
     res.redirect('/');
