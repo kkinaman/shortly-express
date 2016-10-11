@@ -92,11 +92,13 @@ function(req, res) {
 /************************************************************/
 // Write your authentication routes here
 /************************************************************/
-var hashPassword = function(pword) {
+var hashPassword = exports.hashPassword = function(pword) {
   var shasum = crypto.createHash('sha1');
   shasum.update(pword);
   return shasum.digest('hex'); 
 };
+
+
 
 var makeRandomString = function(length) {
   return crypto.randomBytes(Math.ceil(length / 2)).toString('hex').slice(0, length);
@@ -136,14 +138,23 @@ app.get('/signup', function(req, res) {
 
 app.post('/signup', function(req, res) {
   var salt = makeRandomString(10);
-  new User({
-    'username': req.body.username,
-    'password': hashPassword(salt + req.body.password),
-    'salt': salt
-  }).save().then(function() {
-    req.session.username = req.body.username;
-    res.redirect('/');
-  });
+
+  db.knex('users')
+    .where('username', '=', req.body.username)
+    .then(function(results) {
+      if (!results[0]) {
+        new User({
+          'username': req.body.username,
+          'password': hashPassword(salt + req.body.password),
+          'salt': salt
+        }).save().then(function() {
+          req.session.username = req.body.username;
+          res.redirect('/');
+        });
+      } else {
+        res.redirect('/login');
+      }
+    });
 });
 
 

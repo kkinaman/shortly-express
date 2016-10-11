@@ -1,11 +1,13 @@
 var expect = require('chai').expect;
 var request = require('request');
+var crypto = require('crypto');
 
 var db = require('../app/config');
 var Users = require('../app/collections/users');
 var User = require('../app/models/user');
 var Links = require('../app/collections/links');
 var Link = require('../app/models/link');
+//var shortly = require('../shortly');
 
 /************************************************************/
 // Mocha doesn't have a way to designate pending before blocks.
@@ -15,7 +17,6 @@ var Link = require('../app/models/link');
 /************************************************************/
 var xbeforeEach = function() {};
 /************************************************************/
-
 
 describe('', function() {
 
@@ -65,10 +66,18 @@ describe('', function() {
 
     beforeEach(function(done) {
       // create a user that we can then log-in with
-      new User({
-        'username': 'Phillip',
-        'password': 'Phillip'
-      }).save().then(function() {
+
+      var signUpOptions = {
+        'method': 'POST',
+        'followAllRedirects': true,
+        'uri': 'http://127.0.0.1:4568/signup',
+        'json': {
+          'username': 'Phillip',
+          'password': 'Phillip'
+        }
+      };
+
+      requestWithSession(signUpOptions, function(error, res, body) {
         var options = {
           'method': 'POST',
           'followAllRedirects': true,
@@ -78,11 +87,12 @@ describe('', function() {
             'password': 'Phillip'
           }
         };
-        // login via form and save session info
+          // login via form and save session info
         requestWithSession(options, function(error, res, body) {
           done();
         });
       });
+
     });
 
     it('Only shortens valid urls, returning a 404 - Not found for invalid urls', function(done) {
@@ -291,10 +301,18 @@ describe('', function() {
     var requestWithSession = request.defaults({jar: true});
 
     beforeEach(function(done) {
-      new User({
-        'username': 'Phillip',
-        'password': 'Phillip'
-      }).save().then(function() {
+
+      var signUpOptions = {
+        'method': 'POST',
+        'followAllRedirects': true,
+        'uri': 'http://127.0.0.1:4568/signup',
+        'json': {
+          'username': 'Phillip',
+          'password': 'Phillip'
+        }
+      };
+
+      requestWithSession(signUpOptions, function(error, res, body) {
         done();
       });
     });
@@ -332,5 +350,67 @@ describe('', function() {
     });
 
   }); // 'Account Login'
+
+  describe('Security:', function() {
+
+    var requestWithSession = request.defaults({jar: true});
+
+    it('Logs in existing users with encrypted password', function(done) {
+      var options = {
+        'method': 'POST',
+        'uri': 'http://127.0.0.1:4568/signup',
+        'json': {
+          'username': 'helga',
+          'password': 'helga'
+        }
+      };
+
+      requestWithSession(options, function(error, res, body) {
+        var loginOptions = {
+          'method': 'POST',
+          'uri': 'http://127.0.0.1:4568/login',
+          'json': {
+            'username': 'helga',
+            'password': 'helga'
+          }
+        };
+
+        requestWithSession(loginOptions, function(error, res, body) {
+          expect(res.headers.location).to.equal('/');
+          done();
+        });
+      });
+
+
+
+
+    });
+
+    it('The password should be salted and hashed', function(done) {
+
+      var hashPassword = function(pword) {
+        var shasum = crypto.createHash('sha1');
+        shasum.update(pword);
+        return shasum.digest('hex'); 
+      };
+
+
+      db.knex('users')
+        .where('username', '=', 'helga')
+        .then(function(results) {
+          if (results[0]) {
+            expect(results[0]['password']).to.not.equal('helga');
+            expect(results[0]['password']).to.equal(hashPassword(results[0].salt + 'helga'));
+            done();
+          }
+        }).catch(function(err) {
+          throw {
+            type: 'DatabaseError',
+            message: 'Failed to create test setup data'
+          };
+        });
+
+    }); 
+  }); 
 
 });
