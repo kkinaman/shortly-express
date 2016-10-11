@@ -4,7 +4,8 @@ var partials = require('express-partials');
 var bodyParser = require('body-parser');
 var session = require('express-session');
 var crypto = require('crypto');
-
+var passport = require('passport');
+var LocalStrategy = require('passport-local').Strategy;
 
 var db = require('./app/config');
 var Users = require('./app/collections/users');
@@ -12,8 +13,10 @@ var User = require('./app/models/user');
 var Links = require('./app/collections/links');
 var Link = require('./app/models/link');
 var Click = require('./app/models/click');
+var ensure = require('connect-ensure-login');
 
 var app = express();
+
 
 app.set('views', __dirname + '/views');
 app.set('view engine', 'ejs');
@@ -25,37 +28,89 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(__dirname + '/public'));
 
 app.use(session({secret: '2421948719284HIIII', cookie: {}}));
+app.use(passport.initialize());
+app.use(passport.session());
 
-var checkUser = function(req, res, next) {
-  if (!req.session.username) {
-    res.redirect('/login');
-  } else {
-    next();
-  }
+var hashPassword = function(pword) {
+  var shasum = crypto.createHash('sha1');
+  shasum.update(pword);
+  return shasum.digest('hex'); 
 };
 
-app.get('/', checkUser,
-function(req, res) {
-  res.render('index');
+
+
+var makeRandomString = function(length) {
+  return crypto.randomBytes(Math.ceil(length / 2)).toString('hex').slice(0, length);
+};
+
+passport.use(new LocalStrategy( {
+  session: true
+},
+  function(username, password, done) {
+    db.knex('users')
+      .where('username', '=', username)
+      .then(function(results) {
+        var user = results[0];
+        if (user) {
+          if (user.password === hashPassword(user.salt + password)) {
+            console.log('USER FOUND - CORRECT PWORD');
+            done(null, user);
+          } else {
+            console.log('USER FOUND - PASSWORD WRONG');
+            return done(null, false); 
+          }
+        } else {
+          console.log('USER NOT FOUND');
+          return done(null, false);
+        }
+      }).catch(function(err) {
+        return done(err);
+      });
+  }
+));
+
+passport.serializeUser(function(user, done) {
+  done(null, user.id);
 });
+
+passport.deserializeUser(function(user, done) {
+  done(null, user);
+});
+
+// var checkUser = function(req, res, next) {
+//   if (!req.session.username) {
+//     res.redirect('/login');
+//   } else {
+//     next();
+//   }
+// };
+
+app.get('/', 
+  ensure.ensureLoggedIn('/login'),
+  function(req, res) {
+    res.render('index');
+  });
 
 app.post('/', function(req, res) {
   req.session.destroy();
   res.redirect('/login');
 });
 
-app.get('/create', checkUser,
-function(req, res) {
-  res.render('index');
-});
+
+app.get('/create', 
+  ensure.ensureLoggedIn('/login'),
+  function(req, res) {
+    res.render('index');
+  });
 
 
-app.get('/links', checkUser,
-function(req, res) {
-  Links.reset().fetch().then(function(links) {
-    res.status(200).send(links.models);
-  }); 
-});
+app.get('/links', 
+  ensure.ensureLoggedIn('/login'),
+  function(req, res) {
+    Links.reset().fetch().then(function(links) {
+      res.status(200).send(links.models);
+    }); 
+  });
 
 app.post('/links', 
 function(req, res) {
@@ -92,45 +147,17 @@ function(req, res) {
 /************************************************************/
 // Write your authentication routes here
 /************************************************************/
-var hashPassword = exports.hashPassword = function(pword) {
-  var shasum = crypto.createHash('sha1');
-  shasum.update(pword);
-  return shasum.digest('hex'); 
-};
-
-
-
-var makeRandomString = function(length) {
-  return crypto.randomBytes(Math.ceil(length / 2)).toString('hex').slice(0, length);
-};
 
 app.get('/login', function(req, res) {
   res.render('login');
 });
 
-app.post('/login', function(req, res) {
-  var user = req.body.username;
-  db.knex('users')
-    .where('username', '=', user)
-    .then(function(results) {
-      if (results[0]) {
-        if (results[0]['password'] === hashPassword(results[0].salt + req.body.password)) {
-          req.session.username = user;
-          res.redirect('/');
-        } else {
-          //show message to user that username/password invalid
-          // document.getElementsByClassName('invalid_login').show();
-          res.redirect('/login');
-        }
-      } else {
-        res.redirect('/login');
-      }
-    }).catch(function(err) {
-      console.log(err);
-    });
-
-  
-});
+app.post('/login', 
+  passport.authenticate('local', { failureRedirect: '/login' }),
+  function(req, res) {
+    console.log('REDIRECT TO ROOT');
+    res.redirect('/');
+  });
 
 app.get('/signup', function(req, res) {
   res.render('signup');
