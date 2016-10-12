@@ -152,10 +152,13 @@ app.get('/login', function(req, res) {
   res.render('login');
 });
 
+app.get('/loginFail', function(req, res) {
+  res.render('loginFail');
+});
+
 app.post('/login', 
-  passport.authenticate('local', { failureRedirect: '/login' }),
+  passport.authenticate('local', { failureRedirect: '/loginFail'}),
   function(req, res) {
-    console.log('REDIRECT TO ROOT');
     res.redirect('/');
   });
 
@@ -166,22 +169,22 @@ app.get('/signup', function(req, res) {
 app.post('/signup', function(req, res) {
   var salt = makeRandomString(10);
 
-  db.knex('users')
-    .where('username', '=', req.body.username)
-    .then(function(results) {
-      if (!results[0]) {
+  new User({username: req.body.username})
+    .fetch()
+    .then(function(user) {
+      if (!user) {
         new User({
           'username': req.body.username,
           'password': hashPassword(salt + req.body.password),
           'salt': salt
         }).save().then(function() {
-          req.session.username = req.body.username;
-          res.redirect('/');
+          passport.authenticate('local', { successRedirect: '/', failureRedirect: '/loginFail' })(req, res);
         });
       } else {
         res.redirect('/login');
       }
     });
+
 });
 
 
